@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 )
 
@@ -77,7 +78,7 @@ func (t *taskDB) tableExists() bool {
 }
 
 func (t *taskDB) createTable() error {
-	_, err := t.db.Exec(`CREATE table "tasls" ( "id" INTEGER, "name" TEXT NOT NULL, "project" TEXT, "status" TEXT, "created" DATETIME, PRIMARY KEY("id" AUTOINCREMENT))`)
+	_, err := t.db.Exec(`CREATE table "tasks" ( "id" INTEGER, "name" TEXT NOT NULL, "project" TEXT, "status" TEXT, "created" DATETIME, PRIMARY KEY("id" AUTOINCREMENT))`)
 	return err
 }
 
@@ -129,73 +130,57 @@ func (orig *task) merge(t task) {
 	}
 }
 
-func (t *taskDB) getTasks() ([]task, error) {
-	var tasks []task
-	rows, err := t.db.Query("SELECT * FROM tasks")
-	if err != nil {
-		return tasks, fmt.Errorf("unable to get values: %w", err)
-	}
-	for rows.Next() {
-		var task task
-		err = rows.Scan(
-			&task.ID,
-			&task.Name,
-			&task.Project,
-			&task.Status,
-			&task.Created,
-		)
-		if err != nil {
-			return tasks, err
-		}
-		tasks = append(tasks, task)
-	}
-	return tasks, err
+type Options struct {
+	Status  uint
+	Project string
 }
 
-func (t *taskDB) getTasksByStatus(status string) ([]task, error) {
+func (t *taskDB) getTasks(opts Options) ([]task, error) {
 	var tasks []task
-	rows, err := t.db.Query("SELECT * FROM tasks WHERE status = ?", status)
-	if err != nil {
-		return tasks, fmt.Errorf("unable to get values: %w", err)
-	}
-	for rows.Next() {
-		var task task
-		err = rows.Scan(
-			&task.ID,
-			&task.Name,
-			&task.Project,
-			&task.Status,
-			&task.Created,
-		)
-		if err != nil {
-			return tasks, err
-		}
-		tasks = append(tasks, task)
-	}
-	return tasks, err
-}
+	var args []interface{}
 
-func (t *taskDB) getTasksByProject(project string) ([]task, error) {
-	var tasks []task
-	rows, err := t.db.Query("SELECT * FROM tasks WHERE project = ?", project)
+	queryString := "SELECT * FROM tasks"
+	where := make([]string, 0)
+
+	if opts.Status != 0 {
+		where = append(where, "status = ?")
+		args = append(args, opts.Status)
+	}
+
+	if opts.Project != "" {
+		where = append(where, "project = ?")
+		args = append(args, opts.Project)
+	}
+
+	if len(where) > 0 {
+		queryString += " WHERE " + strings.Join(where, " AND ")
+	}
+
+	fmt.Printf(queryString, args...)
+
+	rows, err := t.db.Query(queryString, args...)
 	if err != nil {
 		return tasks, fmt.Errorf("unable to get values: %w", err)
 	}
+
+	defer rows.Close()
 	for rows.Next() {
 		var task task
-		err = rows.Scan(
+		err := rows.Scan(
 			&task.ID,
 			&task.Name,
 			&task.Project,
 			&task.Status,
 			&task.Created,
 		)
+
 		if err != nil {
 			return tasks, err
 		}
 		tasks = append(tasks, task)
 	}
-	return tasks, err
+
+	return tasks, nil
 }
 
 func (t *taskDB) getTask(id uint) (task, error) {

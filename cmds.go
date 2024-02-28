@@ -112,32 +112,31 @@ var updateCmd = &cobra.Command{
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all your tasks",
-	Args:  cobra.RangeArgs(0, 1),
+	Args:  cobra.RangeArgs(0, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		t, err := openDB(setupPath())
 		if err != nil {
 			return err
 		}
-		project, err := cmd.Flags().GetString("project")
-		if err != nil {
-			return err
-		}
 		defer t.db.Close()
-		var tasks []task
-		if project != "" {
-			tasks, err = t.getTasksByProject(project)
-			if err != nil {
-				return err
-			}
+
+		opts := Options{}
+		if project, err := cmd.Flags().GetString("project"); err == nil {
+			opts.Project = project
 		} else {
-			tasks, err = t.getTasks()
-			if err != nil {
-				return err
-			}
+			return err
 		}
+		if status, err := cmd.Flags().GetUint("status"); err == nil {
+			opts.Status = status
+		} else {
+			return err
+		}
+
+		tasks, err := t.getTasks(opts)
 		if err != nil {
 			return err
 		}
+
 		fmt.Print(setupTable(tasks))
 		return nil
 	},
@@ -203,6 +202,12 @@ func init() {
 		"p",
 		"",
 		"specify a project for your task",
+	)
+	listCmd.Flags().UintP(
+		"status",
+		"s",
+		uint(todo),
+		"specify a status for your task",
 	)
 	rootCmd.AddCommand(listCmd)
 	updateCmd.Flags().StringP(
